@@ -1,20 +1,16 @@
 """
-Email Service — sends OTP verification emails via Gmail SMTP.
+Email Service — Priority order:
+  1. Resend API  (set RESEND_API_KEY in Railway — one time, done forever)
+  2. Gmail SMTP  (set SMTP_EMAIL + SMTP_PASSWORD in Railway — alternative)
+  3. Console     (no env vars — OTP shown on screen as fallback)
 
-Setup (one-time):
-1. Enable 2-Step Verification on your Google account
-   → https://myaccount.google.com/security
-
-2. Generate a Gmail App Password
-   → https://myaccount.google.com/apppasswords
-   → Select "Mail" + "Other (custom name)" → name it "NiveshAI"
-   → Copy the 16-character password
-
-3. Add to Railway environment variables:
-   SMTP_EMAIL    = yourgmail@gmail.com
-   SMTP_PASSWORD = xxxx xxxx xxxx xxxx  (the 16-char app password)
-
-That's it — emails will be sent automatically on every signup.
+Resend setup (recommended — 5 minutes, one time only):
+  1. Go to https://resend.com → Sign Up (free, no credit card)
+  2. Dashboard → API Keys → Create API Key → copy it
+  3. Railway → Nivesh_AI → Variables → add:
+       RESEND_API_KEY = re_xxxxxxxxxxxxxxxx
+  That's it. Every user gets their OTP by email from that point on.
+  Free tier: 3,000 emails/month, 100/day — more than enough.
 """
 
 import os
@@ -23,176 +19,168 @@ import ssl
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-SMTP_EMAIL    = os.environ.get("SMTP_EMAIL", "").strip()
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "").strip()
-SMTP_HOST     = "smtp.gmail.com"
-SMTP_PORT     = 587
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
+SMTP_EMAIL     = os.environ.get("SMTP_EMAIL", "").strip()
+SMTP_PASSWORD  = os.environ.get("SMTP_PASSWORD", "").strip()
 
-is_email_configured = bool(SMTP_EMAIL and SMTP_PASSWORD)
+# Sender name/address shown in user's inbox
+FROM_NAME    = "NiveshAI"
+FROM_ADDRESS = "onboarding@resend.dev"   # Resend sandbox — works without domain verification
 
 
 def send_verification_email(to_email: str, full_name: str, otp: str) -> bool:
     """
     Send OTP verification email.
-    Returns True on success, False on failure.
-    Falls back to console print if SMTP is not configured.
+    Returns True if email was delivered, False if shown on screen instead.
+    Tries Resend → Gmail SMTP → console fallback in that order.
     """
-    if not is_email_configured:
-        # Development / unconfigured mode — print to console only
-        print("\n" + "="*52)
-        print("  NiveshAI — Email Verification (Console Mode)")
-        print(f"  To:   {to_email}")
-        print(f"  Name: {full_name}")
-        print(f"  OTP:  {otp}")
-        print("="*52 + "\n")
-        return False   # False = OTP should be shown on screen
+    html = _build_otp_html(full_name, otp)
+    subject = f"{otp} is your NiveshAI verification code"
 
-    try:
-        html_body = _build_otp_email(full_name, otp)
+    # ── Priority 1: Resend ──────────────────────────────────────────
+    if RESEND_API_KEY:
+        try:
+            import resend
+            resend.api_key = RESEND_API_KEY
+            resend.Emails.send({
+                "from":    f"{FROM_NAME} <{FROM_ADDRESS}>",
+                "to":      [to_email],
+                "subject": subject,
+                "html":    html,
+            })
+            print(f"[NiveshAI] OTP sent via Resend to {to_email}")
+            return True
+        except Exception as e:
+            print(f"[NiveshAI] Resend failed: {e} — falling back to SMTP")
 
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"{otp} is your NiveshAI verification code"
-        msg["From"]    = f"NiveshAI <{SMTP_EMAIL}>"
-        msg["To"]      = to_email
+    # ── Priority 2: Gmail SMTP ──────────────────────────────────────
+    if SMTP_EMAIL and SMTP_PASSWORD:
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"]    = f"{FROM_NAME} <{SMTP_EMAIL}>"
+            msg["To"]      = to_email
+            msg.attach(MIMEText(html, "html"))
 
-        msg.attach(MIMEText(html_body, "html"))
+            ctx = ssl.create_default_context()
+            with smtplib.SMTP("smtp.gmail.com", 587) as server:
+                server.ehlo()
+                server.starttls(context=ctx)
+                server.login(SMTP_EMAIL, SMTP_PASSWORD)
+                server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
 
-        context = ssl.create_default_context()
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.ehlo()
-            server.starttls(context=context)
-            server.login(SMTP_EMAIL, SMTP_PASSWORD)
-            server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
+            print(f"[NiveshAI] OTP sent via Gmail to {to_email}")
+            return True
+        except Exception as e:
+            print(f"[NiveshAI] Gmail SMTP failed: {e} — showing OTP on screen")
 
-        print(f"[NiveshAI] OTP email sent to {to_email}")
-        return True
-
-    except smtplib.SMTPAuthenticationError:
-        print("[NiveshAI] Gmail authentication failed. Check SMTP_EMAIL and SMTP_PASSWORD.")
-        return False
-    except smtplib.SMTPException as e:
-        print(f"[NiveshAI] SMTP error: {e}")
-        return False
-    except Exception as e:
-        print(f"[NiveshAI] Email send failed: {e}")
-        return False
+    # ── Priority 3: Console fallback (dev mode) ─────────────────────
+    print("\n" + "="*52)
+    print("  NiveshAI OTP (no email provider configured)")
+    print(f"  To:  {to_email}")
+    print(f"  OTP: {otp}")
+    print("="*52 + "\n")
+    return False   # False = frontend should show OTP on screen
 
 
 def send_welcome_email(to_email: str, full_name: str) -> None:
-    """Send a welcome email after successful verification."""
-    if not is_email_configured:
-        print(f"[NiveshAI] Welcome {full_name}! Account verified: {to_email}")
+    """Welcome email after successful verification."""
+    if not RESEND_API_KEY and not (SMTP_EMAIL and SMTP_PASSWORD):
+        print(f"[NiveshAI] Welcome {full_name}! ({to_email}) — no email provider configured")
         return
 
-    try:
-        html_body = f"""
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="UTF-8"></head>
-        <body style="margin:0;padding:0;background:#04060e;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background:#04060e;padding:40px 20px">
-            <tr><td align="center">
-              <table width="520" cellpadding="0" cellspacing="0" style="background:#0d1020;border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden">
-                <tr>
-                  <td style="background:linear-gradient(135deg,#4f9eff22,#22d3a022);padding:32px;text-align:center;border-bottom:1px solid rgba(255,255,255,.08)">
-                    <div style="font-size:2rem;margin-bottom:8px">📈</div>
-                    <div style="font-size:1.4rem;font-weight:800;background:linear-gradient(90deg,#4f9eff,#22d3a0);-webkit-background-clip:text;-webkit-text-fill-color:transparent">NiveshAI</div>
-                  </td>
-                </tr>
-                <tr>
-                  <td style="padding:36px 40px;color:#f0f4ff">
-                    <h2 style="font-size:1.4rem;font-weight:800;margin-bottom:12px;color:#f0f4ff">Welcome, {full_name}! 🎉</h2>
-                    <p style="color:rgba(240,244,255,.6);line-height:1.7;margin-bottom:24px">
-                      Your NiveshAI account is verified and ready. Start analyzing Indian and global stocks — plain English, no jargon.
-                    </p>
-                    <a href="https://niveshai-production-3635.up.railway.app/dashboard"
-                       style="display:inline-block;background:linear-gradient(135deg,#4f9eff,#22d3a0);color:#04060e;font-weight:700;font-size:.95rem;padding:13px 28px;border-radius:10px;text-decoration:none">
-                      Open Dashboard →
-                    </a>
-                    <hr style="border:none;border-top:1px solid rgba(255,255,255,.06);margin:32px 0">
-                    <p style="font-size:.78rem;color:rgba(240,244,255,.3);line-height:1.6">
-                      NiveshAI is for educational purposes only and does not constitute financial advice.
-                    </p>
-                  </td>
-                </tr>
-              </table>
-            </td></tr>
-          </table>
-        </body>
-        </html>
-        """
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"Welcome to NiveshAI, {full_name}! 🚀"
-        msg["From"]    = f"NiveshAI <{SMTP_EMAIL}>"
-        msg["To"]      = to_email
-        msg.attach(MIMEText(html_body, "html"))
+    html = f"""<!DOCTYPE html>
+    <html><body style="margin:0;padding:0;background:#04060e;font-family:-apple-system,sans-serif">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#04060e;padding:40px 20px">
+      <tr><td align="center">
+        <table width="520" cellpadding="0" cellspacing="0"
+               style="background:#0d1020;border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden">
+          <tr><td style="background:linear-gradient(135deg,#4f9eff22,#22d3a022);padding:28px;text-align:center;border-bottom:1px solid rgba(255,255,255,.08)">
+            <div style="font-size:1.8rem;margin-bottom:6px">📈</div>
+            <div style="font-size:1.3rem;font-weight:800">
+              <span style="color:#4f9eff">Nivesh</span><span style="color:#22d3a0">AI</span>
+            </div>
+          </td></tr>
+          <tr><td style="padding:36px 40px;color:#f0f4ff">
+            <h2 style="font-size:1.2rem;margin-bottom:10px">Welcome, {full_name}! 🎉</h2>
+            <p style="color:rgba(240,244,255,.55);line-height:1.7;margin-bottom:24px;font-size:.9rem">
+              Your account is verified. Start analyzing Indian and global stocks — plain English, no jargon.
+            </p>
+            <a href="https://niveshai-production-3635.up.railway.app/dashboard"
+               style="display:inline-block;background:linear-gradient(135deg,#4f9eff,#22d3a0);color:#04060e;font-weight:700;padding:13px 28px;border-radius:10px;text-decoration:none;font-size:.95rem">
+              Open Dashboard →
+            </a>
+            <hr style="border:none;border-top:1px solid rgba(255,255,255,.06);margin:28px 0">
+            <p style="font-size:.75rem;color:rgba(240,244,255,.25)">Educational purposes only — not financial advice.</p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+    </body></html>"""
 
-        context = ssl.create_default_context()
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.ehlo()
-            server.starttls(context=context)
-            server.login(SMTP_EMAIL, SMTP_PASSWORD)
-            server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
+    subject = f"Welcome to NiveshAI, {full_name}! 🚀"
 
-    except Exception as e:
-        print(f"[NiveshAI] Welcome email failed: {e}")
+    if RESEND_API_KEY:
+        try:
+            import resend
+            resend.api_key = RESEND_API_KEY
+            resend.Emails.send({
+                "from": f"{FROM_NAME} <{FROM_ADDRESS}>",
+                "to": [to_email],
+                "subject": subject,
+                "html": html,
+            })
+        except Exception as e:
+            print(f"[NiveshAI] Welcome email failed (Resend): {e}")
+    elif SMTP_EMAIL and SMTP_PASSWORD:
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = subject
+            msg["From"]    = f"{FROM_NAME} <{SMTP_EMAIL}>"
+            msg["To"]      = to_email
+            msg.attach(MIMEText(html, "html"))
+            ctx = ssl.create_default_context()
+            with smtplib.SMTP("smtp.gmail.com", 587) as server:
+                server.ehlo(); server.starttls(context=ctx)
+                server.login(SMTP_EMAIL, SMTP_PASSWORD)
+                server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
+        except Exception as e:
+            print(f"[NiveshAI] Welcome email failed (SMTP): {e}")
 
 
-def _build_otp_email(full_name: str, otp: str) -> str:
-    """Build the HTML email body for OTP verification."""
+def _build_otp_html(full_name: str, otp: str) -> str:
     digits = "".join(
-        f'<td style="padding:6px;"><div style="width:44px;height:54px;background:#1a1f3a;border:2px solid rgba(79,158,255,.4);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:900;color:#4f9eff;text-align:center;line-height:54px;font-family:monospace">{d}</div></td>'
+        f'<td style="padding:4px"><div style="width:46px;height:56px;background:#1a1f3a;border:2px solid rgba(79,158,255,.4);border-radius:10px;font-size:1.6rem;font-weight:900;color:#4f9eff;text-align:center;line-height:56px;font-family:monospace">{d}</div></td>'
         for d in otp
     )
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head><meta charset="UTF-8"></head>
-    <body style="margin:0;padding:0;background:#04060e;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif">
-      <table width="100%" cellpadding="0" cellspacing="0" style="background:#04060e;padding:40px 20px">
-        <tr><td align="center">
-          <table width="520" cellpadding="0" cellspacing="0" style="background:#0d1020;border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden">
-
-            <!-- Header -->
-            <tr>
-              <td style="background:linear-gradient(135deg,#4f9eff22,#22d3a022);padding:28px 40px;text-align:center;border-bottom:1px solid rgba(255,255,255,.08)">
-                <div style="font-size:1.8rem;margin-bottom:6px">📈</div>
-                <div style="font-size:1.3rem;font-weight:800;letter-spacing:-.02em">
-                  <span style="color:#4f9eff">Nivesh</span><span style="color:#22d3a0">AI</span>
-                </div>
-              </td>
-            </tr>
-
-            <!-- Body -->
-            <tr>
-              <td style="padding:36px 40px;color:#f0f4ff">
-                <h2 style="font-size:1.25rem;font-weight:800;margin-bottom:10px;color:#f0f4ff">
-                  Hi {full_name}, verify your email
-                </h2>
-                <p style="color:rgba(240,244,255,.55);line-height:1.7;margin-bottom:28px;font-size:.9rem">
-                  Enter this 6-digit code to complete your NiveshAI account setup.
-                  The code expires in <strong style="color:#f0f4ff">10 minutes</strong>.
-                </p>
-
-                <!-- OTP Digits -->
-                <table cellpadding="0" cellspacing="0" style="margin:0 auto 28px">
-                  <tr>{digits}</tr>
-                </table>
-
-                <p style="color:rgba(240,244,255,.35);font-size:.82rem;line-height:1.65;margin-bottom:0">
-                  If you didn't create a NiveshAI account, ignore this email. No action needed.
-                </p>
-
-                <hr style="border:none;border-top:1px solid rgba(255,255,255,.06);margin:28px 0">
-                <p style="font-size:.75rem;color:rgba(240,244,255,.25);line-height:1.6;margin:0">
-                  This email was sent by NiveshAI · For educational purposes only · Not financial advice
-                </p>
-              </td>
-            </tr>
-
-          </table>
-        </td></tr>
-      </table>
-    </body>
-    </html>
-    """
+    return f"""<!DOCTYPE html>
+    <html><body style="margin:0;padding:0;background:#04060e;font-family:-apple-system,sans-serif">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#04060e;padding:40px 20px">
+      <tr><td align="center">
+        <table width="520" cellpadding="0" cellspacing="0"
+               style="background:#0d1020;border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden">
+          <tr><td style="background:linear-gradient(135deg,#4f9eff22,#22d3a022);padding:24px 40px;text-align:center;border-bottom:1px solid rgba(255,255,255,.08)">
+            <div style="font-size:1.6rem;margin-bottom:5px">📈</div>
+            <div style="font-size:1.2rem;font-weight:800">
+              <span style="color:#4f9eff">Nivesh</span><span style="color:#22d3a0">AI</span>
+            </div>
+          </td></tr>
+          <tr><td style="padding:36px 40px;color:#f0f4ff">
+            <h2 style="font-size:1.2rem;font-weight:800;margin-bottom:10px">Hi {full_name}, verify your email</h2>
+            <p style="color:rgba(240,244,255,.55);font-size:.88rem;line-height:1.7;margin-bottom:28px">
+              Enter this 6-digit code to activate your NiveshAI account.
+              It expires in <strong style="color:#f0f4ff">10 minutes</strong>.
+            </p>
+            <table cellpadding="0" cellspacing="0" style="margin:0 auto 28px"><tr>{digits}</tr></table>
+            <p style="color:rgba(240,244,255,.3);font-size:.8rem;line-height:1.6">
+              If you didn't request this, ignore this email. No action needed.
+            </p>
+            <hr style="border:none;border-top:1px solid rgba(255,255,255,.06);margin:24px 0">
+            <p style="font-size:.72rem;color:rgba(240,244,255,.2)">
+              NiveshAI · Educational purposes only · Not financial advice
+            </p>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table>
+    </body></html>"""
