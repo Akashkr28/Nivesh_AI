@@ -116,13 +116,27 @@ async def signup(req: SignUpRequest, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
 
+    import os
+    smtp_configured = bool(os.environ.get("SMTP_EMAIL") and os.environ.get("SMTP_PASSWORD"))
+
     send_verification_email(req.email, req.full_name, otp)
 
-    return {
+    # If SMTP is not configured, return OTP directly in the response
+    # so the user can complete signup without email access.
+    # When SMTP is configured, otp_visible is omitted — user gets it via email.
+    response = {
         "status": "otp_sent",
-        "message": f"Verification code sent to {req.email}. Check your inbox (or terminal if running locally).",
         "email": req.email,
     }
+
+    if smtp_configured:
+        response["message"] = f"Verification code sent to {req.email}. Check your inbox."
+    else:
+        response["message"] = "Email not configured. Use the code shown below to verify."
+        response["otp_visible"] = otp   # shown directly on the verify screen
+        response["note"] = "To send real emails, add SMTP_EMAIL and SMTP_PASSWORD in your Railway variables."
+
+    return response
 
 
 @router.post("/verify", summary="Verify email with OTP")
@@ -256,11 +270,16 @@ async def resend_otp(email: str, db: Session = Depends(get_db)):
     if user.is_verified:
         raise HTTPException(status_code=400, detail="Account is already verified")
 
+    import os
+    smtp_configured = bool(os.environ.get("SMTP_EMAIL") and os.environ.get("SMTP_PASSWORD"))
     otp = generate_verification_token()
     user.verification_token = otp
     db.commit()
     send_verification_email(user.email, user.full_name, otp)
-    return {"status": "otp_resent", "message": "New verification code sent"}
+    response = {"status": "otp_resent", "message": "New verification code sent"}
+    if not smtp_configured:
+        response["otp_visible"] = otp
+    return response
 
 
 # ── Helper ──────────────────────────────────────────────────────────────────────

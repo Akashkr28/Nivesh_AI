@@ -69,6 +69,12 @@
     /* OTP */
     .verify-icon{font-size:3rem;text-align:center;margin-bottom:12px}
     .verify-note{background:rgba(79,158,255,.08);border:1px solid rgba(79,158,255,.2);border-radius:8px;padding:10px 14px;font-size:.8rem;color:var(--muted);margin-bottom:20px;text-align:center;line-height:1.6}
+    /* OTP visible box (no-email fallback) */
+    .otp-inline-box{background:rgba(34,211,160,.07);border:1px solid rgba(34,211,160,.3);border-radius:12px;padding:16px 18px;margin-bottom:16px;text-align:center}
+    .otp-inline-label{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:rgba(34,211,160,.7);margin-bottom:8px}
+    .otp-inline-code{font-size:2.2rem;font-weight:900;letter-spacing:.18em;color:#22d3a0;font-family:monospace;margin-bottom:8px}
+    .otp-inline-note{font-size:.72rem;color:rgba(240,244,255,.45);line-height:1.5}
+
     .otp-row{display:flex;gap:8px;justify-content:center;margin:18px 0}
     .otp-box{width:48px;height:56px;background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:1.4rem;font-weight:800;text-align:center;outline:none;transition:all .2s}
     .otp-box:focus{border-color:var(--accent);background:rgba(79,158,255,.1);box-shadow:0 0 0 3px rgba(79,158,255,.15)}
@@ -169,7 +175,18 @@
         <div class="verify-icon">📧</div>
         <h1 class="auth-title" style="text-align:center">Check your email</h1>
         <p class="auth-sub" style="text-align:center">We sent a 6-digit code to<br/><strong id="verify-email-display" style="color:var(--accent)">—</strong></p>
-        <div class="verify-note">Running locally? Check your <strong>terminal</strong> — the OTP is printed there.</div>
+        <!-- Shown when SMTP is not configured — OTP returned directly from server -->
+        <div id="otp-visible-section" class="hidden">
+          <div class="otp-inline-box">
+            <div class="otp-inline-label">Your verification code</div>
+            <div id="otp-visible-box" class="otp-inline-code">——————</div>
+            <div class="otp-inline-note">⚠️ Email not configured. Code auto-filled below — just click Verify.</div>
+          </div>
+        </div>
+
+        <!-- Shown when SMTP IS configured -->
+        <div class="verify-note">Check your inbox for the 6-digit code. Running locally? It's in the terminal.</div>
+
         <div class="otp-row">
           <input type="text" maxlength="1" class="otp-box" id="otp0" oninput="otpMove(0)"/>
           <input type="text" maxlength="1" class="otp-box" id="otp1" oninput="otpMove(1)"/>

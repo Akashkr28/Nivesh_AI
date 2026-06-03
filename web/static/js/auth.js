@@ -80,6 +80,20 @@ async function doSignUp() {
     pendingEmail = email;
     document.getElementById('verify-email-display').textContent = email;
     showPanel('verify');
+
+    // If SMTP not configured, server returns the OTP directly — show it on screen
+    if (data.otp_visible) {
+      const box = document.getElementById('otp-visible-box');
+      if (box) {
+        box.textContent = data.otp_visible;
+        document.getElementById('otp-visible-section').classList.remove('hidden');
+      }
+      // Auto-fill the OTP boxes
+      data.otp_visible.split('').forEach((ch, i) => {
+        const el = document.getElementById('otp' + i);
+        if (el) el.value = ch;
+      });
+    }
   } catch (e) {
     showError('su-error', 'Server error. Please try again.');
   }
@@ -125,8 +139,22 @@ async function doVerify() {
 
 async function resendOTP() {
   if (!pendingEmail) return;
-  await fetch('/api/auth/resend-otp?email=' + encodeURIComponent(pendingEmail));
-  alert('New code sent! Check your terminal (or inbox).');
+  const res = await fetch('/api/auth/resend-otp?email=' + encodeURIComponent(pendingEmail));
+  const data = await res.json();
+
+  if (data.otp_visible) {
+    const box = document.getElementById('otp-visible-box');
+    if (box) {
+      box.textContent = data.otp_visible;
+      document.getElementById('otp-visible-section').classList.remove('hidden');
+    }
+    data.otp_visible.split('').forEach((ch, i) => {
+      const el = document.getElementById('otp' + i);
+      if (el) el.value = ch;
+    });
+  } else {
+    alert('New code sent! Check your inbox.');
+  }
 }
 
 // ── Profile Setup ─────────────────────────────────────────────────────────────
