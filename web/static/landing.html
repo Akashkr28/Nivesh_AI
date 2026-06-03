@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NiveshAI — AI-Powered Market Intelligence</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#04060e;
+      --text:#f0f4ff;
+      --muted:rgba(240,244,255,.52);
+      --accent:#4f9eff;
+      --green:#22d3a0;
+      --border:rgba(255,255,255,.08);
+      --glass:rgba(10,14,30,.7);
+    }
+    html{scroll-behavior:smooth}
+    body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;overflow-x:hidden}
+    a{text-decoration:none;color:inherit}
+
+    /* ── NAV ── */
+    nav{position:fixed;top:0;left:0;right:0;z-index:200;padding:18px 0;transition:all .4s}
+    nav.scrolled{background:rgba(4,6,14,.92);border-bottom:1px solid var(--border);backdrop-filter:blur(20px)}
+    .nav-inner{max-width:1200px;margin:0 auto;padding:0 36px;display:flex;justify-content:space-between;align-items:center}
+    .nav-logo{display:flex;align-items:center;gap:10px;font-size:1.3rem;font-weight:800;letter-spacing:-.03em}
+    .nav-logo-box{width:35px;height:35px;background:linear-gradient(135deg,#4f9eff,#22d3a0);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0}
+    .nav-logo span{background:linear-gradient(90deg,#4f9eff,#22d3a0);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .nav-links{display:flex;align-items:center;gap:6px}
+    .nav-links a{color:var(--muted);font-size:.88rem;padding:7px 14px;border-radius:8px;transition:all .2s}
+    .nav-links a:hover{color:var(--text)}
+    .nav-signin{border:1px solid var(--border)!important;color:var(--text)!important}
+    .nav-cta{background:linear-gradient(135deg,#4f9eff,#22d3a0)!important;color:#04060e!important;font-weight:700!important;border-radius:10px!important;padding:9px 20px!important}
+
+    /* ── HERO ── */
+    .hero{min-height:100vh;display:grid;grid-template-columns:1fr 1fr;align-items:center;max-width:1200px;margin:0 auto;padding:100px 36px 60px;gap:40px}
+
+    /* LEFT */
+    .hero-left{display:flex;flex-direction:column;align-items:flex-start}
+    .hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(79,158,255,.08);border:1px solid rgba(79,158,255,.22);color:var(--accent);border-radius:30px;padding:6px 16px;font-size:.76rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;margin-bottom:28px}
+    .badge-pulse{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;animation:bpulse 2s ease-in-out infinite}
+    @keyframes bpulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(1.5)}}
+    .hero-title{font-size:clamp(2.4rem,4.5vw,3.8rem);font-weight:900;line-height:1.1;letter-spacing:-.04em;margin-bottom:20px}
+    .hero-title .line2{background:linear-gradient(120deg,#4f9eff 0%,#22d3a0 50%,#a78bfa 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;display:block}
+    .hero-sub{font-size:1.05rem;color:var(--muted);line-height:1.8;margin-bottom:36px;max-width:440px}
+    .hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:48px}
+    .btn-cta{background:linear-gradient(135deg,#4f9eff,#22d3a0);color:#04060e;border:none;border-radius:12px;padding:14px 28px;font-size:.97rem;font-weight:700;cursor:pointer;transition:all .3s;box-shadow:0 0 32px rgba(79,158,255,.28);letter-spacing:.01em}
+    .btn-cta:hover{transform:translateY(-2px);box-shadow:0 8px 40px rgba(79,158,255,.45)}
+    .btn-ghost{background:rgba(255,255,255,.05);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:14px 26px;font-size:.97rem;font-weight:600;cursor:pointer;backdrop-filter:blur(10px);transition:all .3s}
+    .btn-ghost:hover{border-color:rgba(79,158,255,.5);background:rgba(79,158,255,.08)}
+
+    /* Stats row */
+    .hero-stats{display:flex;gap:28px;flex-wrap:wrap}
+    .stat{display:flex;flex-direction:column;gap:3px}
+    .stat-val{font-size:1.5rem;font-weight:800;letter-spacing:-.03em;background:linear-gradient(90deg,#4f9eff,#22d3a0);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .stat-lbl{font-size:.72rem;color:var(--muted);letter-spacing:.04em}
+    .stat-divider{width:1px;height:36px;background:var(--border);align-self:center}
+
+    /* RIGHT — 3D canvas */
+    .hero-right{position:relative;height:540px;display:flex;align-items:center;justify-content:center}
+    #sphere-canvas{width:100%;height:100%;display:block}
+
+    /* ── FEATURES ── */
+    .features{padding:100px 36px;max-width:1200px;margin:0 auto}
+    .sec-tag{display:inline-block;background:rgba(79,158,255,.1);border:1px solid rgba(79,158,255,.2);color:var(--accent);font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:5px 14px;border-radius:20px;margin-bottom:14px}
+    .sec-title{font-size:clamp(1.7rem,3vw,2.6rem);font-weight:800;letter-spacing:-.03em;margin-bottom:56px;line-height:1.2}
+    .sec-title em{font-style:normal;background:linear-gradient(90deg,#4f9eff,#22d3a0);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .feats{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:18px}
+    .feat{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:16px;padding:28px;transition:all .3s;position:relative;overflow:hidden;cursor:default}
+    .feat::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(79,158,255,.05),transparent);opacity:0;transition:opacity .3s}
+    .feat:hover{border-color:rgba(79,158,255,.35);transform:translateY(-4px);box-shadow:0 16px 50px rgba(79,158,255,.08)}
+    .feat:hover::after{opacity:1}
+    .feat-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin-bottom:16px}
+    .fi-b{background:rgba(79,158,255,.12);border:1px solid rgba(79,158,255,.18)}
+    .fi-g{background:rgba(34,211,160,.12);border:1px solid rgba(34,211,160,.18)}
+    .fi-p{background:rgba(167,139,250,.12);border:1px solid rgba(167,139,250,.18)}
+    .feat h3{font-size:1.02rem;font-weight:700;margin-bottom:9px;letter-spacing:-.01em}
+    .feat p{font-size:.86rem;color:var(--muted);line-height:1.72}
+
+    /* ── MARKETS ── */
+    .markets{padding:60px 36px;max-width:1200px;margin:0 auto}
+    .markets-row{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+    .mblock{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:16px;padding:32px}
+    .mflag{font-size:2.5rem;margin-bottom:12px;display:block}
+    .mblock h3{font-size:1.15rem;font-weight:700;margin-bottom:9px}
+    .mblock p{font-size:.86rem;color:var(--muted);line-height:1.7;margin-bottom:16px}
+    .mtags{display:flex;flex-wrap:wrap;gap:6px}
+    .mt{background:rgba(79,158,255,.08);border:1px solid rgba(79,158,255,.18);color:var(--accent);border-radius:20px;padding:3px 12px;font-size:.7rem;font-family:monospace;font-weight:700}
+
+    /* ── HOW ── */
+    .how{padding:100px 36px;max-width:1200px;margin:0 auto;text-align:center}
+    .steps{display:flex;align-items:flex-start;justify-content:center;gap:0;max-width:880px;margin:0 auto;flex-wrap:wrap}
+    .step{flex:1;min-width:200px;padding:0 20px;text-align:center}
+    .step-n{width:50px;height:50px;background:linear-gradient(135deg,#4f9eff,#22d3a0);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:800;color:#04060e;margin:0 auto 16px}
+    .step h3{font-size:.97rem;font-weight:700;margin-bottom:7px}
+    .step p{font-size:.84rem;color:var(--muted);line-height:1.65}
+    .step-arrow{flex:0 0 50px;height:2px;background:linear-gradient(90deg,#4f9eff,#22d3a0);opacity:.25;align-self:center;margin-top:-22px}
+
+    /* ── CTA ── */
+    .cta-section{padding:100px 36px;max-width:760px;margin:0 auto;text-align:center}
+    .cta-inner{background:linear-gradient(135deg,rgba(79,158,255,.07),rgba(34,211,160,.07));border:1px solid rgba(79,158,255,.18);border-radius:24px;padding:64px 48px;backdrop-filter:blur(16px)}
+    .cta-inner h2{font-size:clamp(1.7rem,3vw,2.5rem);font-weight:800;letter-spacing:-.03em;margin-bottom:12px}
+    .cta-inner p{color:var(--muted);margin-bottom:28px;font-size:.97rem}
+
+    /* ── FOOTER ── */
+    footer{padding:40px 36px;border-top:1px solid var(--border);text-align:center}
+    .foot-logo{font-size:1.1rem;font-weight:800;background:linear-gradient(90deg,#4f9eff,#22d3a0);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:9px}
+    footer p{font-size:.74rem;color:rgba(240,244,255,.3)}
+    footer p+p{margin-top:4px}
+
+    /* ════════════════════════
+       PROFESSIONAL FOOTER
+    ════════════════════════ */
+    .site-footer{position:relative;margin-top:0;background:#020408;border-top:1px solid rgba(255,255,255,.06)}
+    .footer-glow{height:1px;background:linear-gradient(90deg,transparent,#4f9eff66,#22d3a066,#4f9eff66,transparent)}
+
+    .footer-inner{max-width:1200px;margin:0 auto;padding:64px 36px 48px;display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:40px}
+
+    /* Brand column */
+    .footer-brand{}
+    .footer-logo{display:flex;align-items:center;gap:9px;font-size:1.25rem;font-weight:800;letter-spacing:-.03em;margin-bottom:16px;text-decoration:none}
+    .footer-logo-box{width:32px;height:32px;background:linear-gradient(135deg,#4f9eff,#22d3a0);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
+    .footer-logo span{background:linear-gradient(90deg,#4f9eff,#22d3a0);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .footer-tagline{font-size:.82rem;color:rgba(240,244,255,.42);line-height:1.75;margin-bottom:22px;max-width:260px}
+
+    /* Social */
+    .footer-social{display:flex;gap:8px}
+    .social-btn{width:34px;height:34px;border-radius:8px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;color:rgba(240,244,255,.45);transition:all .2s;text-decoration:none}
+    .social-btn:hover{background:rgba(79,158,255,.12);border-color:rgba(79,158,255,.35);color:#4f9eff}
+
+    /* Link columns */
+    .footer-col{}
+    .footer-col-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:rgba(240,244,255,.35);margin-bottom:16px}
+    .footer-links{list-style:none;display:flex;flex-direction:column;gap:10px}
+    .footer-links a{font-size:.84rem;color:rgba(240,244,255,.5);text-decoration:none;transition:color .2s;display:inline-block}
+    .footer-links a:hover{color:#4f9eff}
+
+    /* Market status strip */
+    .footer-market-strip{border-top:1px solid rgba(255,255,255,.05);border-bottom:1px solid rgba(255,255,255,.05);padding:14px 0;background:rgba(255,255,255,.015)}
+    .market-strip-inner{display:flex;align-items:center;gap:0;flex-wrap:wrap}
+    .ms-item{display:flex;align-items:center;gap:8px;padding:6px 20px}
+    .ms-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+    .ms-dot.green{background:#22d3a0;box-shadow:0 0 6px #22d3a088}
+    .ms-dot.blue{background:#4f9eff;box-shadow:0 0 6px #4f9eff88}
+    .ms-dot.purple{background:#a78bfa;box-shadow:0 0 6px #a78bfa88}
+    .ms-dot.orange{background:#f59e0b;box-shadow:0 0 6px #f59e0b88}
+    .ms-label{font-size:.7rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:rgba(240,244,255,.35)}
+    .ms-val{font-size:.75rem;color:rgba(240,244,255,.55);font-weight:600}
+    .ms-sep{width:1px;height:20px;background:rgba(255,255,255,.07)}
+
+    /* Bottom bar */
+    .footer-bottom{padding:18px 0;background:rgba(0,0,0,.3)}
+    .bottom-inner{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+    .bottom-left{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .bottom-copy{font-size:.75rem;color:rgba(240,244,255,.3)}
+    .bottom-sep{font-size:.75rem;color:rgba(255,255,255,.12)}
+    .bottom-made{font-size:.75rem;color:rgba(240,244,255,.25)}
+    .disclaimer-badge{font-size:.72rem;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.18);color:rgba(245,158,11,.7);border-radius:20px;padding:4px 12px}
+
+    @media(max-width:1024px){.footer-inner{grid-template-columns:1fr 1fr;gap:32px}.footer-brand{grid-column:span 2}}
+    @media(max-width:580px){.footer-inner{grid-template-columns:1fr}.footer-brand{grid-column:span 1}.bottom-inner{flex-direction:column;text-align:center}.market-strip-inner{justify-content:center}.ms-item{padding:4px 12px}}
+
+    @media(max-width:860px){
+      .hero{grid-template-columns:1fr;padding-top:90px}
+      .hero-right{height:360px;order:-1}
+      .hero-left{align-items:center;text-align:center}
+      .hero-sub,.hero-actions,.hero-stats{align-self:center;justify-content:center}
+      .markets-row{grid-template-columns:1fr}
+      .step-arrow{display:none}
+      .nav-links a:not(.nav-cta):not(.nav-signin){display:none}
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-logo">
+      <div class="nav-logo-box">📈</div>
+      <span>NiveshAI</span>
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#how">How It Works</a>
+      <a href="/auth" class="nav-signin">Sign In</a>
+      <a href="/auth?mode=signup" class="nav-cta">Get Started Free</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+
+  <!-- LEFT: Content -->
+  <div class="hero-left">
+    <div class="hero-badge">
+      <span class="badge-pulse"></span>
+      Live Indian &amp; Global Markets
+    </div>
+
+    <h1 class="hero-title">
+      Smart Market Analysis.<br/>
+      <span class="line2">No Jargon. No Guessing.</span>
+    </h1>
+
+    <p class="hero-sub">
+      NiveshAI decodes complex stock data into plain English — RSI, MACD,
+      Momentum Score, AI Predictions — explained simply so every investor
+      can act with confidence.
+    </p>
+
+    <div class="hero-actions">
+      <a href="/auth?mode=signup" class="btn-cta">Start Analyzing Free →</a>
+      <a href="/auth" class="btn-ghost">Sign In</a>
+    </div>
+
+    <div class="hero-stats">
+      <div class="stat">
+        <span class="stat-val">2000+</span>
+        <span class="stat-lbl">NSE Stocks</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat">
+        <span class="stat-val">12</span>
+        <span class="stat-lbl">Indicators</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat">
+        <span class="stat-val">Live</span>
+        <span class="stat-lbl">Intraday Data</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: 3D Sphere -->
+  <div class="hero-right">
+    <canvas id="sphere-canvas"></canvas>
+  </div>
+
+</section>
+
+<!-- FEATURES -->
+<section class="features" id="features">
+  <div style="text-align:center;margin-bottom:54px">
+    <div class="sec-tag">What NiveshAI Does</div>
+    <h2 class="sec-title">Everything you need to<br/><em>understand the market</em></h2>
+  </div>
+  <div class="feats">
+    <div class="feat"><div class="feat-icon fi-b">🔍</div><h3>Deep Stock Analysis</h3><p>RSI, MACD, Bollinger Bands, ATR — every indicator explained in plain English. No finance background needed.</p></div>
+    <div class="feat"><div class="feat-icon fi-g">⚡</div><h3>AI Momentum Score</h3><p>A single 0–100 score combining 4 key indicators. Know instantly if a stock has strong momentum or is fading.</p></div>
+    <div class="feat"><div class="feat-icon fi-p">🔮</div><h3>Price Predictions</h3><p>ML-powered 1-week and 1-month targets with bull, base, and bear scenarios. See the probability of positive return.</p></div>
+    <div class="feat"><div class="feat-icon fi-b">📰</div><h3>Today's Market Summary</h3><p>"What happened today" — market moves explained in clear language anyone can understand, no jargon.</p></div>
+    <div class="feat"><div class="feat-icon fi-g">💼</div><h3>Portfolio Tracker</h3><p>Add your holdings manually. See live P&amp;L, momentum, and regime for every stock you own in one view.</p></div>
+    <div class="feat"><div class="feat-icon fi-p">🔔</div><h3>Smart Alerts</h3><p>Price levels, RSI crossings, regime changes. Get notified the moment a key signal fires on any stock.</p></div>
+  </div>
+</section>
+
+<!-- MARKETS -->
+<section class="markets">
+  <div class="markets-row">
+    <div class="mblock">
+      <span class="mflag">🇮🇳</span>
+      <h3>Full Indian Market Coverage</h3>
+      <p>All 2,000+ NSE-listed stocks. Nifty 50, Sensex, Bank Nifty. Prices in ₹. Handles restructured companies automatically.</p>
+      <div class="mtags">
+        <span class="mt">RELIANCE.NS</span><span class="mt">TCS.NS</span><span class="mt">HDFCBANK.NS</span>
+        <span class="mt">IRCTC.NS</span><span class="mt">HAL.NS</span><span class="mt">^NSEI</span>
+      </div>
+    </div>
+    <div class="mblock">
+      <span class="mflag">🌍</span>
+      <h3>Global Markets Too</h3>
+      <p>US stocks, indices, and ETFs. Compare Nifty vs S&amp;P 500. Same clean interface, every market.</p>
+      <div class="mtags">
+        <span class="mt">AAPL</span><span class="mt">TSLA</span><span class="mt">NVDA</span>
+        <span class="mt">SPY</span><span class="mt">QQQ</span><span class="mt">META</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW -->
+<section class="how" id="how">
+  <div class="sec-tag">How It Works</div>
+  <h2 class="sec-title" style="margin-bottom:52px">Three steps to market clarity</h2>
+  <div class="steps">
+    <div class="step"><div class="step-n">1</div><h3>Type any stock</h3><p>Enter a company name or ticker. RELIANCE.NS, TCS, Apple, Tesla — anything.</p></div>
+    <div class="step-arrow"></div>
+    <div class="step"><div class="step-n">2</div><h3>AI runs analysis</h3><p>Fetches live data, computes 12 indicators, detects regime, runs the momentum model.</p></div>
+    <div class="step-arrow"></div>
+    <div class="step"><div class="step-n">3</div><h3>Read plain English</h3><p>Regime, momentum score, predictions — no charts to decode, no jargon to learn.</p></div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="cta-inner">
+    <h2>Start analyzing smarter today</h2>
+    <p>Free forever. No credit card. No limits on analysis.</p>
+    <a href="/auth?mode=signup" class="btn-cta" style="font-size:1.02rem;padding:15px 36px">Create Free Account →</a>
+  </div>
+</section>
+
+<!-- ═══════════════════════════
+     PROFESSIONAL FOOTER
+════════════════════════════ -->
+<footer class="site-footer" id="site-footer">
+
+  <!-- Top gradient divider -->
+  <div class="footer-glow"></div>
+
+  <div class="footer-inner">
+
+    <!-- ── Column 1: Brand ── -->
+    <div class="footer-brand">
+      <a href="/" class="footer-logo">
+        <div class="footer-logo-box">📈</div>
+        <span>NiveshAI</span>
+      </a>
+      <p class="footer-tagline">
+        AI-powered market intelligence for Indian and global investors.
+        Plain English. No jargon. Built to help everyday investors make
+        confident decisions.
+      </p>
+      <!-- Social links -->
+      <div class="footer-social">
+        <a href="#" class="social-btn" title="Twitter / X">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.742l7.732-8.85L1.254 2.25H8.08l4.259 5.63zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        </a>
+        <a href="#" class="social-btn" title="LinkedIn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+        </a>
+        <a href="#" class="social-btn" title="GitHub">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.374 0 0 5.373 0 12c0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23A11.509 11.509 0 0112 5.803c1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576C20.566 21.797 24 17.3 24 12c0-6.627-5.373-12-12-12z"/></svg>
+        </a>
+        <a href="#" class="social-btn" title="YouTube">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 00-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 00.527 6.205a31.247 31.247 0 00-.522 5.805 31.247 31.247 0 00.522 5.783 3.007 3.007 0 002.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 002.088-2.088 31.247 31.247 0 00.5-5.783 31.247 31.247 0 00-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
+        </a>
+      </div>
+    </div>
+
+    <!-- ── Column 2: Product ── -->
+    <div class="footer-col">
+      <h4 class="footer-col-title">Product</h4>
+      <ul class="footer-links">
+        <li><a href="/dashboard">Dashboard</a></li>
+        <li><a href="/dashboard">Analyze Stocks</a></li>
+        <li><a href="/dashboard#tab-today">Today's Market</a></li>
+        <li><a href="/dashboard#tab-portfolio">Portfolio Tracker</a></li>
+        <li><a href="/dashboard#tab-alerts">Smart Alerts</a></li>
+        <li><a href="/auth?mode=signup">Get Started Free</a></li>
+      </ul>
+    </div>
+
+    <!-- ── Column 3: Markets ── -->
+    <div class="footer-col">
+      <h4 class="footer-col-title">Markets Covered</h4>
+      <ul class="footer-links">
+        <li><a href="/dashboard?ticker=^NSEI">Nifty 50</a></li>
+        <li><a href="/dashboard?ticker=^BSESN">Sensex</a></li>
+        <li><a href="/dashboard?ticker=^NSEBANK">Bank Nifty</a></li>
+        <li><a href="/dashboard?ticker=RELIANCE.NS">NSE Stocks</a></li>
+        <li><a href="/dashboard?ticker=SPY">S&amp;P 500 (US)</a></li>
+        <li><a href="/dashboard?ticker=AAPL">Global Stocks</a></li>
+      </ul>
+    </div>
+
+    <!-- ── Column 4: Resources ── -->
+    <div class="footer-col">
+      <h4 class="footer-col-title">Resources</h4>
+      <ul class="footer-links">
+        <li><a href="#">What is RSI?</a></li>
+        <li><a href="#">Understanding MACD</a></li>
+        <li><a href="#">Market Regimes Explained</a></li>
+        <li><a href="#">How AI Predictions Work</a></li>
+        <li><a href="#">Portfolio Basics</a></li>
+        <li><a href="#">API Reference</a></li>
+      </ul>
+    </div>
+
+    <!-- ── Column 5: Company ── -->
+    <div class="footer-col">
+      <h4 class="footer-col-title">Company</h4>
+      <ul class="footer-links">
+        <li><a href="#">About NiveshAI</a></li>
+        <li><a href="#">Blog</a></li>
+        <li><a href="#">Careers</a></li>
+        <li><a href="#">Contact Us</a></li>
+        <li><a href="#">Privacy Policy</a></li>
+        <li><a href="#">Terms of Service</a></li>
+      </ul>
+    </div>
+
+  </div>
+
+  <!-- ── Market Status Strip ── -->
+  <div class="footer-market-strip">
+    <div class="footer-inner" style="padding-top:0;padding-bottom:0">
+      <div class="market-strip-inner">
+        <div class="ms-item">
+          <span class="ms-dot green"></span>
+          <span class="ms-label">NSE</span>
+          <span class="ms-val" id="f-nse">Checking...</span>
+        </div>
+        <div class="ms-sep"></div>
+        <div class="ms-item">
+          <span class="ms-dot blue"></span>
+          <span class="ms-label">BSE</span>
+          <span class="ms-val" id="f-bse">Checking...</span>
+        </div>
+        <div class="ms-sep"></div>
+        <div class="ms-item">
+          <span class="ms-dot purple"></span>
+          <span class="ms-label">NYSE</span>
+          <span class="ms-val" id="f-nyse">Checking...</span>
+        </div>
+        <div class="ms-sep"></div>
+        <div class="ms-item">
+          <span class="ms-dot orange"></span>
+          <span class="ms-label">NASDAQ</span>
+          <span class="ms-val" id="f-nasdaq">Checking...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Bottom bar ── -->
+  <div class="footer-bottom">
+    <div class="footer-inner" style="padding-top:0;padding-bottom:0">
+      <div class="bottom-inner">
+        <div class="bottom-left">
+          <span class="bottom-copy">© 2025 NiveshAI. All rights reserved.</span>
+          <span class="bottom-sep">·</span>
+          <span class="bottom-made">Built with ❤️ for Indian investors</span>
+        </div>
+        <div class="bottom-right">
+          <span class="disclaimer-badge">⚠️ Educational purposes only — not financial advice</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</footer>
+
+<script>
+// Footer market status
+(async function(){
+  const checks = [
+    ['^NSEI',  'f-nse'],
+    ['^BSESN', 'f-bse'],
+    ['SPY',    'f-nyse'],
+    ['QQQ',    'f-nasdaq'],
+  ];
+  for(const [ticker, id] of checks){
+    try{
+      const r = await fetch('/api/market-status?ticker=' + ticker);
+      const d = await r.json();
+      const el = document.getElementById(id);
+      if(el) el.textContent = d.status_label || '—';
+    } catch{ const el = document.getElementById(id); if(el) el.textContent = '—'; }
+  }
+})();
+</script>
+
+<!-- ════════════════════════════════════════
+     THREE.JS — 3D CURRENCY SPHERE
+════════════════════════════════════════ -->
+<script>
+(function () {
+  const canvas = document.getElementById('sphere-canvas');
+  const container = canvas.parentElement;
+
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x000000, 0);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
+  camera.position.set(0, 0, 11);
+
+  // ── Resize handling ──
+  function resize() {
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    renderer.setSize(w, h);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // ════════════════════════════
+  // 1. PARTICLE SPHERE
+  // ════════════════════════════
+  const SPHERE_R   = 3.0;
+  const PART_COUNT = 1800;
+
+  const spherePositions = new Float32Array(PART_COUNT * 3);
+  const sphereColors    = new Float32Array(PART_COUNT * 3);
+
+  // Fibonacci sphere — perfectly even distribution
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  for (let i = 0; i < PART_COUNT; i++) {
+    const y     = 1 - (i / (PART_COUNT - 1)) * 2;          // -1 to 1
+    const r     = Math.sqrt(1 - y * y);
+    const theta = goldenAngle * i;
+    const x     = Math.cos(theta) * r;
+    const z     = Math.sin(theta) * r;
+
+    spherePositions[i * 3]     = x * SPHERE_R;
+    spherePositions[i * 3 + 1] = y * SPHERE_R;
+    spherePositions[i * 3 + 2] = z * SPHERE_R;
+
+    // Gradient colour: top=blue, middle=teal, bottom=purple
+    const t = (y + 1) / 2;  // 0..1
+    sphereColors[i * 3]     = 0.31 + t * 0.06;   // R
+    sphereColors[i * 3 + 1] = 0.40 + t * 0.43;   // G  (teal → blue shift)
+    sphereColors[i * 3 + 2] = 0.65 + t * 0.35;   // B
+  }
+
+  const sphereGeo = new THREE.BufferGeometry();
+  sphereGeo.setAttribute('position', new THREE.BufferAttribute(spherePositions, 3));
+  sphereGeo.setAttribute('color',    new THREE.BufferAttribute(sphereColors,    3));
+
+  const sphereMat = new THREE.PointsMaterial({
+    size: 0.045,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.85,
+    sizeAttenuation: true,
+  });
+  const sphereMesh = new THREE.Points(sphereGeo, sphereMat);
+  scene.add(sphereMesh);
+
+  // Thin wireframe rings on the sphere for a "globe" feel
+  const ringMat = new THREE.LineBasicMaterial({ color: 0x4f9eff, transparent: true, opacity: 0.07 });
+  for (let lat = -75; lat <= 75; lat += 25) {
+    const rad = Math.cos(lat * Math.PI / 180) * SPHERE_R;
+    const yPos = Math.sin(lat * Math.PI / 180) * SPHERE_R;
+    const ringGeo = new THREE.BufferGeometry();
+    const pts = [];
+    for (let a = 0; a <= 360; a += 3) {
+      pts.push(Math.cos(a * Math.PI / 180) * rad, yPos, Math.sin(a * Math.PI / 180) * rad);
+    }
+    ringGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+    scene.add(new THREE.Line(ringGeo, ringMat));
+  }
+
+  // Glowing core
+  const coreGeo = new THREE.SphereGeometry(0.55, 32, 32);
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0x4f9eff, transparent: true, opacity: 0.18 });
+  scene.add(new THREE.Mesh(coreGeo, coreMat));
+
+  // ════════════════════════════
+  // 2. CURRENCY SPRITES
+  // ════════════════════════════
+  const CURRENCIES = [
+    { sym: '₹',  color: '#ff9933', orbit: 4.2, speed: 0.40, incX:  0,   incZ: 0   },
+    { sym: '$',  color: '#22d3a0', orbit: 4.8, speed: 0.30, incX:  55,  incZ: 0   },
+    { sym: '€',  color: '#4f9eff', orbit: 5.2, speed: 0.25, incX: -40,  incZ: 25  },
+    { sym: '£',  color: '#f59e0b', orbit: 4.5, speed: 0.35, incX:  70,  incZ: 10  },
+    { sym: '¥',  color: '#ff4f6b', orbit: 5.6, speed: 0.20, incX:  30,  incZ: -45 },
+    { sym: '₿',  color: '#f97316', orbit: 4.0, speed: 0.50, incX: -25,  incZ: 60  },
+    { sym: '₦',  color: '#a78bfa', orbit: 5.0, speed: 0.28, incX:  80,  incZ: -20 },
+    { sym: '₩',  color: '#06b6d4', orbit: 5.4, speed: 0.22, incX: -60,  incZ: 35  },
+  ];
+
+  function makeSprite(sym, color) {
+    // SVG approach — works perfectly in Safari WebGL textures
+    const S = 256;
+    const halfS = S / 2;
+    const r = S * 0.36;
+
+    // Hex color → rgb for filter
+    const svgStr = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="${S}" height="${S}">
+        <defs>
+          <radialGradient id="g" cx="50%" cy="50%" r="65%">
+            <stop offset="0%"  stop-color="${color}" stop-opacity="0.7"/>
+            <stop offset="55%" stop-color="${color}" stop-opacity="0.2"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+          </radialGradient>
+          <filter id="blur">
+            <feGaussianBlur stdDeviation="6"/>
+          </filter>
+        </defs>
+        <!-- Outer glow -->
+        <circle cx="${halfS}" cy="${halfS}" r="${r * 1.35}" fill="url(#g)" filter="url(#blur)"/>
+        <!-- Disc background -->
+        <circle cx="${halfS}" cy="${halfS}" r="${r}" fill="${color}" fill-opacity="0.18"/>
+        <!-- Border -->
+        <circle cx="${halfS}" cy="${halfS}" r="${r}" fill="none" stroke="${color}" stroke-width="5" stroke-opacity="0.85"/>
+        <!-- Symbol -->
+        <text x="${halfS}" y="${halfS + 4}"
+          text-anchor="middle" dominant-baseline="middle"
+          font-family="Arial, Helvetica, sans-serif"
+          font-size="${Math.floor(S * 0.35)}"
+          font-weight="900"
+          fill="${color}"
+          fill-opacity="1">${sym}</text>
+      </svg>`;
+
+    const blob = new Blob([svgStr], { type: 'image/svg+xml' });
+    const url  = URL.createObjectURL(blob);
+
+    const img = new Image();
+    const tex = new THREE.Texture();
+    img.onload = () => {
+      tex.image   = img;
+      tex.needsUpdate = true;
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+
+    return new THREE.Sprite(new THREE.SpriteMaterial({
+      map: tex, transparent: true, depthWrite: false,
+    }));
+  }
+
+  const orbiters = CURRENCIES.map((c, i) => {
+    const sprite = makeSprite(c.sym, c.color);
+    sprite.scale.set(1.15, 1.15, 1.15);
+    scene.add(sprite);
+
+    const phase    = (i / CURRENCIES.length) * Math.PI * 2;
+    const incXrad  = c.incX  * Math.PI / 180;
+    const incZrad  = c.incZ  * Math.PI / 180;
+
+    return { sprite, ...c, phase, incXrad, incZrad };
+  });
+
+  // ════════════════════════════
+  // 3. ORBIT RING VISUALISERS
+  // ════════════════════════════
+  orbiters.forEach(o => {
+    const pts = [];
+    for (let a = 0; a <= 360; a += 4) {
+      const rad = a * Math.PI / 180;
+      const x = Math.cos(rad) * o.orbit;
+      const y = Math.sin(rad) * o.orbit;
+      pts.push(x, y, 0);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+    const mat = new THREE.LineBasicMaterial({ color: o.color, transparent: true, opacity: 0.08 });
+    const ring = new THREE.Line(geo, mat);
+    ring.rotation.x = o.incXrad;
+    ring.rotation.z = o.incZrad;
+    scene.add(ring);
+  });
+
+  // ════════════════════════════
+  // 4. BACKGROUND STARS
+  // ════════════════════════════
+  const starCount = 300;
+  const starPos   = new Float32Array(starCount * 3);
+  for (let i = 0; i < starCount; i++) {
+    starPos[i*3]   = (Math.random() - 0.5) * 60;
+    starPos[i*3+1] = (Math.random() - 0.5) * 60;
+    starPos[i*3+2] = (Math.random() - 0.5) * 40;
+  }
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+  scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({
+    color: 0xffffff, size: 0.04, transparent: true, opacity: 0.35,
+  })));
+
+  // ════════════════════════════
+  // 5. MOUSE PARALLAX
+  // ════════════════════════════
+  let mouseX = 0, mouseY = 0;
+  window.addEventListener('mousemove', e => {
+    mouseX = (e.clientX / window.innerWidth  - 0.5) * 2;
+    mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+  });
+
+  // ════════════════════════════
+  // 6. ANIMATION LOOP
+  // ════════════════════════════
+  const clock = new THREE.Clock();
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const t = clock.getElapsedTime();
+
+    // Sphere slow rotation
+    sphereMesh.rotation.y = t * 0.08;
+    sphereMesh.rotation.x = Math.sin(t * 0.06) * 0.15;
+
+    // Orbit each currency
+    orbiters.forEach(o => {
+      const angle = t * o.speed + o.phase;
+
+      // Local orbit position (in orbit plane)
+      const lx = Math.cos(angle) * o.orbit;
+      const ly = Math.sin(angle) * o.orbit;
+
+      // Apply inclination rotations
+      const cosX = Math.cos(o.incXrad), sinX = Math.sin(o.incXrad);
+      const cosZ = Math.cos(o.incZrad), sinZ = Math.sin(o.incZrad);
+
+      // Rotate around X axis
+      const y1 = ly * cosX;
+      const z1 = ly * sinX;
+      // Rotate around Z axis
+      const x2 = lx * cosZ - y1 * sinZ;
+      const y2 = lx * sinZ + y1 * cosZ;
+
+      o.sprite.position.set(x2, y2, z1);
+
+      // Scale pulse
+      const s = 1.1 + Math.sin(t * 1.5 + o.phase) * 0.1;
+      o.sprite.scale.set(s, s, s);
+    });
+
+    // Subtle camera parallax
+    camera.position.x += (mouseX * 0.8 - camera.position.x) * 0.025;
+    camera.position.y += (-mouseY * 0.6 - camera.position.y) * 0.025;
+    camera.lookAt(scene.position);
+
+    renderer.render(scene, camera);
+  }
+  animate();
+})();
+
+// Nav scroll effect
+window.addEventListener('scroll', () => {
+  document.getElementById('nav').classList.toggle('scrolled', scrollY > 40);
+});
+</script>
+</body>
+</html>

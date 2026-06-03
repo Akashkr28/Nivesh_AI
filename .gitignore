@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Data files (large CSVs, trained models, user data)
+data/*.csv
+data/*.pkl
+data/*.db
+data/india_cache/
+results/checkpoints/
+results/charts/
+results/*.pkl
+results/training_log.txt
+
+# Sensitive / environment
+.env
+.env.local
+*.env
+secrets.toml
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Test files
+/tmp/
+autologin.html
+footer-view.html
+footer-preview.html

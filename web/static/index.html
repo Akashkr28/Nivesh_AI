@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Market Analysis Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <link rel="stylesheet" href="/static/css/style.css"/>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<header>
+  <div class="header-inner">
+    <a href="/" class="logo">
+      <div class="logo-icon-wrap">📈</div>
+      <div>
+        <h1>NiveshAI</h1>
+        <p>Live data · AI momentum · Predictions · Portfolio · Alerts</p>
+      </div>
+    </a>
+    <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <div id="marketClocks" class="market-clocks"></div>
+
+      <!-- User Menu — shown after login -->
+      <div id="userMenu" class="user-menu hidden">
+        <!-- Avatar + name — click opens dropdown -->
+        <div class="user-trigger" onclick="toggleUserDropdown()">
+          <div id="userAvatar" class="user-avatar">—</div>
+          <span id="userName" class="user-name">—</span>
+          <span class="user-caret">▾</span>
+        </div>
+
+        <!-- Dropdown -->
+        <div id="userDropdown" class="user-dropdown hidden">
+          <div class="ud-header">
+            <div id="udAvatar" class="ud-avatar">—</div>
+            <div>
+              <div id="udName" class="ud-name">—</div>
+              <div id="udEmail" class="ud-email">—</div>
+              <div id="udRisk" class="ud-risk">—</div>
+            </div>
+          </div>
+          <div class="ud-divider"></div>
+          <button class="ud-item" onclick="openSettings(); toggleUserDropdown()">⚙️ Settings</button>
+          <button class="ud-item logout" onclick="doLogout()">🚪 Sign Out</button>
+        </div>
+      </div>
+
+      <!-- Not logged in — show sign in link (hidden by default, shown by JS if no token) -->
+      <div id="guestMenu" class="hidden">
+        <a href="/auth" class="guest-signin-btn">Sign In</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ── Tabs ── -->
+<div class="tabs-bar">
+  <div class="tabs-inner">
+    <button class="tab-btn active" onclick="switchTab('analyze')">🔍 Analyze</button>
+    <button class="tab-btn" onclick="switchTab('today')">📰 Today's Market</button>
+    <button class="tab-btn" onclick="switchTab('portfolio')">💼 Portfolio <span id="portfolioCount" class="tab-badge hidden">0</span></button>
+    <button class="tab-btn" onclick="switchTab('alerts')">🔔 Alerts <span id="alertsBadge" class="tab-badge triggered hidden">!</span></button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     TAB 1: ANALYZE
+════════════════════════════════════════ -->
+<div id="tab-analyze" class="tab-content active">
+
+  <section class="search-section">
+    <div class="search-card">
+      <h2>Analyze Any Stock — India &amp; Global</h2>
+      <p class="search-hint">Indian stocks: <strong>RELIANCE.NS</strong>, <strong>TCS.NS</strong> &nbsp;|&nbsp; US stocks: <strong>AAPL</strong>, <strong>NVDA</strong> &nbsp;|&nbsp; Indices: <strong>^NSEI</strong>, <strong>^BSESN</strong></p>
+      <div class="search-row">
+        <div class="input-wrapper">
+          <input id="tickerInput" type="text" placeholder="Enter ticker or company name" maxlength="20" autocomplete="off"/>
+          <div id="suggestions" class="suggestions hidden"></div>
+        </div>
+        <select id="periodSelect">
+          <option value="1">1 Year</option>
+          <option value="2">2 Years</option>
+          <option value="3" selected>3 Years</option>
+          <option value="5">5 Years</option>
+        </select>
+        <button id="analyzeBtn" onclick="runAnalysis()">Analyze</button>
+      </div>
+      <div class="quick-section">
+        <div class="quick-group">
+          <span class="quick-label">🇮🇳 India</span>
+          <button class="chip" onclick="quickPick('RELIANCE.NS')">Reliance</button>
+          <button class="chip" onclick="quickPick('TCS.NS')">TCS</button>
+          <button class="chip" onclick="quickPick('INFY.NS')">Infosys</button>
+          <button class="chip" onclick="quickPick('HDFCBANK.NS')">HDFC Bank</button>
+          <button class="chip" onclick="quickPick('^NSEI')">Nifty 50</button>
+          <button class="chip" onclick="quickPick('^BSESN')">Sensex</button>
+          <button class="chip" onclick="quickPick('ADANIENT.NS')">Adani Ent.</button>
+          <button class="chip" onclick="quickPick('M&M.NS')">Mahindra</button>
+        </div>
+        <div class="quick-group">
+          <span class="quick-label">🌍 Global</span>
+          <button class="chip" onclick="quickPick('AAPL')">Apple</button>
+          <button class="chip" onclick="quickPick('TSLA')">Tesla</button>
+          <button class="chip" onclick="quickPick('NVDA')">NVIDIA</button>
+          <button class="chip" onclick="quickPick('SPY')">S&amp;P 500</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div id="loadingSection" class="hidden">
+    <div class="loader-card">
+      <div class="spinner"></div>
+      <p id="loadingText">Fetching live market data...</p>
+      <div class="loading-steps" id="loadingSteps"></div>
+    </div>
+  </div>
+  <div id="errorSection" class="hidden">
+    <div class="error-card">
+      <span class="error-icon">⚠️</span>
+      <p id="errorText">Something went wrong.</p>
+      <button onclick="clearError()">Try Again</button>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div id="resultsSection" class="hidden">
+    <section class="results-header">
+      <div class="company-info">
+        <h2 id="companyName">—</h2>
+        <div class="company-meta">
+          <span id="tickerBadge" class="badge">—</span>
+          <span id="exchangeBadge" class="badge secondary">—</span>
+          <span id="sectorBadge" class="badge secondary">—</span>
+          <span id="marketCapBadge" class="badge secondary">—</span>
+        </div>
+      </div>
+      <div class="price-hero">
+        <div class="price-main" id="currentPrice">—</div>
+        <div class="price-change" id="dayChange">—</div>
+        <div id="marketStatusBadge" class="market-status-badge">—</div>
+      </div>
+    </section>
+
+    <!-- Add to Portfolio / Alert quick-add -->
+    <section class="quick-actions-bar">
+      <button class="qa-btn green" onclick="openAddHolding()">➕ Add to Portfolio</button>
+      <button class="qa-btn blue" onclick="openAddAlert()">🔔 Set Alert</button>
+      <button class="qa-btn purple" id="narrativeBtn" onclick="loadNarrative()">📰 Explain This</button>
+    </section>
+
+    <!-- AI Narrative inline -->
+    <div id="narrativeCard" class="narrative-card hidden">
+      <div class="narrative-header">
+        <span class="narrative-title">📰 What Happened Today</span>
+        <span id="narrativeLoading" class="narrative-loading hidden">Generating...</span>
+      </div>
+      <div id="narrativeText" class="narrative-text">—</div>
+    </div>
+
+    <section class="live-quote-section">
+      <div class="lq-grid">
+        <div class="lq-card"><div class="lq-label">Day High</div><div id="lqHigh" class="lq-value positive">—</div></div>
+        <div class="lq-card"><div class="lq-label">Day Low</div><div id="lqLow" class="lq-value negative">—</div></div>
+        <div class="lq-card"><div class="lq-label">Prev. Close</div><div id="lqPrevClose" class="lq-value">—</div></div>
+        <div class="lq-card"><div class="lq-label">Volume</div><div id="lqVolume" class="lq-value">—</div></div>
+        <div class="lq-card"><div class="lq-label">52W High</div><div id="lq52High" class="lq-value">—</div></div>
+        <div class="lq-card"><div class="lq-label">52W Low</div><div id="lq52Low" class="lq-value">—</div></div>
+        <div class="lq-card lq-wide">
+          <div class="lq-label">52-Week Range</div>
+          <div id="lqRangeBar" class="range-bar-wrap">
+            <div class="range-bar-track"><div id="rangeBarFill" class="range-bar-fill"></div></div>
+            <div id="lqRangePct" class="range-pct">—</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="regime-section">
+      <div id="regimeBanner" class="regime-banner">
+        <div class="regime-left">
+          <div class="regime-label">Current Market Regime</div>
+          <div id="regimeName" class="regime-name">—</div>
+          <div id="regimeDesc" class="regime-desc">—</div>
+        </div>
+        <div class="regime-right">
+          <div class="regime-label">What To Do Now</div>
+          <div id="regimeTip" class="regime-tip">—</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="momentum-section">
+      <h3 class="section-title">⚡ Momentum Score</h3>
+      <div class="momentum-card">
+        <div class="momentum-gauge-wrap"><div id="momentumGaugeChart" style="height:200px;"></div></div>
+        <div class="momentum-right">
+          <div id="momentumLabel" class="momentum-label">—</div>
+          <div id="momentumAdvice" class="momentum-advice">—</div>
+          <div id="momentumBreakdown" class="momentum-breakdown"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="intraday-section">
+      <div class="section-header-row">
+        <h3 class="section-title">🕐 Today's Price Movement</h3>
+        <div id="intradayStatus" class="intraday-status">—</div>
+      </div>
+      <div class="intraday-stats-row" id="intradayStats"></div>
+      <div id="intradayMomentumBanner" class="intraday-momentum-banner"></div>
+      <div id="intradayChart" class="chart-container" style="height:300px;"></div>
+    </section>
+
+    <section class="metrics-section">
+      <h3 class="section-title">📊 Technical Indicators</h3>
+      <div class="metrics-grid">
+        <div class="metric-card"><div class="metric-label">RSI (14)</div><div id="rsiValue" class="metric-value">—</div><div id="rsiLabel" class="metric-tag">—</div></div>
+        <div class="metric-card"><div class="metric-label">Bollinger Position</div><div id="bbValue" class="metric-value">—</div><div id="bbLabel" class="metric-tag">—</div></div>
+        <div class="metric-card"><div class="metric-label">MACD</div><div id="macdLabel" class="metric-value" style="font-size:1.1rem">—</div></div>
+        <div class="metric-card"><div class="metric-label">Volume Activity</div><div id="volumeLabel" class="metric-value" style="font-size:1rem">—</div></div>
+        <div class="metric-card"><div class="metric-label">Annual Volatility</div><div id="volatility" class="metric-value">—</div></div>
+        <div class="metric-card"><div class="metric-label">ATR (per trade)</div><div id="atrValue" class="metric-value">—</div></div>
+      </div>
+    </section>
+
+    <section class="changes-section">
+      <h3 class="section-title">📅 Price Performance</h3>
+      <div class="changes-grid">
+        <div class="change-card"><div class="change-label">Today</div><div id="changeDay" class="change-value">—</div></div>
+        <div class="change-card"><div class="change-label">1 Week</div><div id="changeWeek" class="change-value">—</div></div>
+        <div class="change-card"><div class="change-label">1 Month</div><div id="changeMonth" class="change-value">—</div></div>
+        <div class="change-card"><div class="change-label">1 Year</div><div id="changeYear" class="change-value">—</div></div>
+      </div>
+    </section>
+
+    <section class="prediction-section">
+      <h3 class="section-title">🔮 AI Price Prediction</h3>
+      <div class="prediction-disclaimer" id="predDisclaimer"></div>
+      <div class="prediction-grid">
+        <div class="prediction-card">
+          <div class="pred-horizon">1 Week (5 Trading Days)</div>
+          <div class="pred-direction" id="pred1wDir">—</div>
+          <div class="pred-targets" id="pred1wTargets"></div>
+          <div class="pred-prob" id="pred1wProb">—</div>
+        </div>
+        <div class="prediction-card">
+          <div class="pred-horizon">1 Month (30 Trading Days)</div>
+          <div class="pred-direction" id="pred1mDir">—</div>
+          <div class="pred-targets" id="pred1mTargets"></div>
+          <div class="pred-prob" id="pred1mProb">—</div>
+        </div>
+      </div>
+      <div class="drivers-card">
+        <div class="drivers-title">What's Driving the Prediction</div>
+        <div id="topDrivers" class="drivers-list"></div>
+      </div>
+    </section>
+
+    <section class="strategy-section">
+      <h3 class="section-title">🎯 What This Means For You</h3>
+      <div id="strategyCard" class="strategy-card">
+        <div id="strategyRisk" class="risk-badge">—</div>
+        <div id="strategyActions" class="strategy-actions">—</div>
+      </div>
+    </section>
+
+    <section class="signals-section">
+      <h3 class="section-title">🔍 Analysis Signals</h3>
+      <div id="signalsList" class="signals-list">—</div>
+    </section>
+
+    <section class="charts-section">
+      <h3 class="section-title">📈 Historical Price Chart</h3>
+      <div id="priceChart" class="chart-container"></div>
+    </section>
+
+    <section class="charts-section">
+      <h3 class="section-title">⚡ RSI &amp; MACD</h3>
+      <div id="rsiChart" class="chart-container" style="height:220px;"></div>
+      <div id="macdChart" class="chart-container" style="height:220px;margin-top:14px;"></div>
+    </section>
+
+    <section class="perf-section">
+      <h3 class="section-title">📋 Historical Performance</h3>
+      <div class="perf-grid">
+        <div class="perf-card"><div class="perf-label">Total Return</div><div id="perfReturn" class="perf-value">—</div></div>
+        <div class="perf-card"><div class="perf-label">CAGR</div><div id="perfCagr" class="perf-value">—</div></div>
+        <div class="perf-card"><div class="perf-label">Sharpe Ratio</div><div id="perfSharpe" class="perf-value">—</div><div class="perf-hint">&gt;1 is good</div></div>
+        <div class="perf-card"><div class="perf-label">Max Drawdown</div><div id="perfDrawdown" class="perf-value">—</div></div>
+        <div class="perf-card"><div class="perf-label">Win Rate</div><div id="perfWinrate" class="perf-value">—</div></div>
+        <div class="perf-card"><div class="perf-label">Sortino Ratio</div><div id="perfSortino" class="perf-value">—</div></div>
+      </div>
+    </section>
+    <section class="disclaimer"><p>⚠️ <strong>Disclaimer:</strong> Educational purposes only. Not financial advice. Price predictions are statistical projections. Past performance does not guarantee future results.</p></section>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     TAB 2: TODAY'S MARKET
+════════════════════════════════════════ -->
+<div id="tab-today" class="tab-content hidden">
+  <div class="tab-inner">
+    <div class="today-header">
+      <h2>Today's Market — What's Happening</h2>
+      <button class="refresh-btn" onclick="loadMarketSummary()">↻ Refresh</button>
+    </div>
+
+    <div id="todayLoading" class="loader-card hidden"><div class="spinner"></div><p>Fetching market data...</p></div>
+
+    <!-- Overall mood -->
+    <div id="moodBanner" class="mood-banner hidden">
+      <div id="moodLabel" class="mood-label">—</div>
+      <div id="moodDesc" class="mood-desc">—</div>
+      <div id="moodTime" class="mood-time">—</div>
+    </div>
+
+    <!-- Index cards -->
+    <div id="indexCards" class="index-cards"></div>
+
+    <!-- Per-index narrative -->
+    <div id="indexNarratives" class="index-narratives"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     TAB 3: PORTFOLIO
+════════════════════════════════════════ -->
+<div id="tab-portfolio" class="tab-content hidden">
+  <div class="tab-inner">
+    <div class="portfolio-header">
+      <h2>💼 My Portfolio</h2>
+      <button class="qa-btn green" onclick="openAddHolding()">➕ Add Stock</button>
+    </div>
+
+    <div id="portfolioLoading" class="loader-card hidden"><div class="spinner"></div><p>Loading portfolio...</p></div>
+    <div id="portfolioEmpty" class="empty-state hidden">
+      <div class="empty-icon">💼</div>
+      <p>No holdings yet. Add your first stock to track P&L, momentum, and get alerts.</p>
+      <button class="qa-btn green" onclick="openAddHolding()">➕ Add First Stock</button>
+    </div>
+
+    <!-- Summary -->
+    <div id="portfolioSummary" class="portfolio-summary hidden"></div>
+
+    <!-- Risk flags -->
+    <div id="portfolioFlags" class="portfolio-flags hidden"></div>
+
+    <!-- Holdings table -->
+    <div id="holdingsGrid" class="holdings-grid"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     TAB 4: ALERTS
+════════════════════════════════════════ -->
+<div id="tab-alerts" class="tab-content hidden">
+  <div class="tab-inner">
+    <div class="alerts-header">
+      <h2>🔔 Price &amp; Signal Alerts</h2>
+      <div class="alerts-header-actions">
+        <button class="refresh-btn" onclick="checkAlerts()">↻ Check Now</button>
+        <button class="qa-btn blue" onclick="openAddAlert()">➕ New Alert</button>
+      </div>
+    </div>
+
+    <div id="alertsLoading" class="loader-card hidden"><div class="spinner"></div><p>Checking alerts...</p></div>
+
+    <!-- Triggered -->
+    <div id="triggeredSection" class="hidden">
+      <h3 class="alerts-section-title triggered">🔴 Triggered Alerts</h3>
+      <div id="triggeredList"></div>
+    </div>
+
+    <!-- Watching -->
+    <div id="watchingSection">
+      <h3 class="alerts-section-title">👁️ Watching</h3>
+      <div id="watchingList"><p class="empty-text">No active alerts. Add one to get started.</p></div>
+    </div>
+
+    <!-- History -->
+    <div id="alertHistorySection" class="hidden">
+      <h3 class="alerts-section-title">📋 Recent History</h3>
+      <div id="alertHistoryList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     MODALS
+════════════════════════════════════════ -->
+
+<!-- Add Holding Modal -->
+<div id="addHoldingModal" class="modal-overlay hidden" onclick="closeModal('addHoldingModal')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Add to Portfolio</h3>
+      <button class="modal-close" onclick="closeModal('addHoldingModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Stock Ticker</label>
+        <input id="holdingTicker" type="text" placeholder="e.g. RELIANCE.NS or AAPL" class="form-input"/>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Quantity (shares)</label>
+          <input id="holdingQty" type="number" placeholder="e.g. 10" class="form-input"/>
+        </div>
+        <div class="form-group">
+          <label>Buy Price (per share)</label>
+          <input id="holdingPrice" type="number" placeholder="e.g. 2500" class="form-input" step="0.01"/>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Buy Date (optional)</label>
+        <input id="holdingDate" type="date" class="form-input"/>
+      </div>
+      <div class="form-group">
+        <label>Notes (optional)</label>
+        <input id="holdingNotes" type="text" placeholder="e.g. Long-term hold" class="form-input"/>
+      </div>
+      <div id="holdingError" class="form-error hidden"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="qa-btn gray" onclick="closeModal('addHoldingModal')">Cancel</button>
+      <button class="qa-btn green" onclick="submitAddHolding()">Add to Portfolio</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Alert Modal -->
+<div id="addAlertModal" class="modal-overlay hidden" onclick="closeModal('addAlertModal')">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>Set an Alert</h3>
+      <button class="modal-close" onclick="closeModal('addAlertModal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Stock Ticker</label>
+        <input id="alertTicker" type="text" placeholder="e.g. RELIANCE.NS or AAPL" class="form-input"/>
+      </div>
+      <div class="form-group">
+        <label>Alert Type</label>
+        <select id="alertType" class="form-input" onchange="toggleAlertValue()">
+          <option value="price_above">Price rises above a level</option>
+          <option value="price_below">Price falls below a level</option>
+          <option value="rsi_below">RSI falls below (oversold / buy signal)</option>
+          <option value="rsi_above">RSI rises above (overbought)</option>
+          <option value="momentum_below">Momentum score falls below</option>
+          <option value="momentum_above">Momentum score rises above</option>
+          <option value="regime_change">Market regime changes</option>
+        </select>
+      </div>
+      <div class="form-group" id="alertValueGroup">
+        <label id="alertValueLabel">Target Value</label>
+        <input id="alertValue" type="number" placeholder="e.g. 2500" class="form-input" step="0.01"/>
+      </div>
+      <div class="form-group">
+        <label>Notes (optional)</label>
+        <input id="alertNotes" type="text" placeholder="Why you set this alert" class="form-input"/>
+      </div>
+      <div id="alertError" class="form-error hidden"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="qa-btn gray" onclick="closeModal('addAlertModal')">Cancel</button>
+      <button class="qa-btn blue" onclick="submitAddAlert()">Set Alert</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════
+     SETTINGS MODAL
+════════════════════════════════════════ -->
+<div id="settingsModal" class="modal-overlay hidden" onclick="closeSettings()">
+  <div class="modal settings-modal" onclick="event.stopPropagation()">
+
+    <div class="modal-header">
+      <h3>⚙️ Account Settings</h3>
+      <button class="modal-close" onclick="closeSettings()">✕</button>
+    </div>
+
+    <!-- Settings Tabs -->
+    <div class="settings-tabs">
+      <button class="stab active" onclick="switchSettingsTab('profile')" id="stab-profile">Profile</button>
+      <button class="stab" onclick="switchSettingsTab('security')" id="stab-security">Security</button>
+      <button class="stab danger-tab" onclick="switchSettingsTab('danger')" id="stab-danger">Danger Zone</button>
+    </div>
+
+    <!-- ── Profile Tab ── -->
+    <div id="stab-content-profile" class="stab-content">
+      <div class="settings-section">
+        <div class="settings-avatar-row">
+          <div id="settingsAvatar" class="settings-avatar">AK</div>
+          <div>
+            <div id="settingsFullName" class="settings-display-name">—</div>
+            <div id="settingsEmail" class="settings-display-email">—</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Full Name</label>
+          <input id="set-name" type="text" class="form-input" placeholder="Your full name"/>
+        </div>
+
+        <div class="form-group">
+          <label>Risk Profile</label>
+          <div class="risk-pills">
+            <button class="risk-pill" id="rpill-conservative" onclick="selectSettingsRisk('conservative')">🛡️ Conservative</button>
+            <button class="risk-pill active" id="rpill-moderate" onclick="selectSettingsRisk('moderate')">⚖️ Moderate</button>
+            <button class="risk-pill" id="rpill-aggressive" onclick="selectSettingsRisk('aggressive')">🚀 Aggressive</button>
+          </div>
+          <div class="risk-pill-desc" id="risk-pill-desc">Balanced growth and safety</div>
+        </div>
+
+        <div id="profile-success" class="settings-success hidden">✅ Profile updated successfully</div>
+        <div id="profile-error" class="settings-error hidden"></div>
+        <button class="auth-btn" style="margin-top:8px" onclick="saveProfile()">Save Changes</button>
+      </div>
+    </div>
+
+    <!-- ── Security Tab ── -->
+    <div id="stab-content-security" class="stab-content hidden">
+      <div class="settings-section">
+        <h4 class="settings-section-title">Change Password</h4>
+        <div class="form-group">
+          <label>Current Password</label>
+          <div class="input-eye">
+            <input id="set-cur-pass" type="password" class="form-input" placeholder="Enter current password"/>
+            <button class="eye-btn" onclick="togglePassField('set-cur-pass')">👁</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>New Password <span class="label-hint">(minimum 6 characters)</span></label>
+          <div class="input-eye">
+            <input id="set-new-pass" type="password" class="form-input" placeholder="Enter new password"/>
+            <button class="eye-btn" onclick="togglePassField('set-new-pass')">👁</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Confirm New Password</label>
+          <div class="input-eye">
+            <input id="set-confirm-pass" type="password" class="form-input" placeholder="Re-enter new password"/>
+            <button class="eye-btn" onclick="togglePassField('set-confirm-pass')">👁</button>
+          </div>
+        </div>
+        <div id="pass-success" class="settings-success hidden">✅ Password changed successfully</div>
+        <div id="pass-error" class="settings-error hidden"></div>
+        <button class="auth-btn" style="margin-top:8px" onclick="changePassword()">Update Password</button>
+      </div>
+    </div>
+
+    <!-- ── Danger Zone Tab ── -->
+    <div id="stab-content-danger" class="stab-content hidden">
+      <div class="settings-section danger-zone">
+
+        <!-- Step 1: Warning -->
+        <div id="delete-step1">
+          <div class="danger-icon">⚠️</div>
+          <h4 class="danger-title">Delete Account</h4>
+          <p class="danger-desc">This will permanently delete your NiveshAI account and <strong>all your data</strong> including:</p>
+          <ul class="danger-list">
+            <li>🗑️ Your complete portfolio and all holdings</li>
+            <li>🗑️ All price alerts you have set</li>
+            <li>🗑️ Your profile and preferences</li>
+            <li>🗑️ Your login access</li>
+          </ul>
+          <p class="danger-warning">⛔ This action is <strong>irreversible</strong>. There is no undo.</p>
+          <button class="danger-btn" onclick="showDeleteStep2()">I understand, proceed to delete →</button>
+        </div>
+
+        <!-- Step 2: Final confirmation -->
+        <div id="delete-step2" class="hidden">
+          <div class="danger-icon">🔴</div>
+          <h4 class="danger-title">Final Confirmation</h4>
+          <p class="danger-desc">Enter your password to permanently delete your account.</p>
+
+          <div class="form-group" style="margin-top:16px">
+            <label>Your Password</label>
+            <div class="input-eye">
+              <input id="delete-password" type="password" class="form-input" placeholder="Enter your password to confirm"/>
+              <button class="eye-btn" onclick="togglePassField('delete-password')">👁</button>
+            </div>
+          </div>
+
+          <div class="delete-confirm-check">
+            <input type="checkbox" id="delete-confirm-cb" onchange="toggleDeleteBtn()"/>
+            <label for="delete-confirm-cb">
+              I confirm I want to permanently delete my account and all data. I understand this cannot be undone.
+            </label>
+          </div>
+
+          <div id="delete-error" class="settings-error hidden"></div>
+
+          <div class="delete-final-actions">
+            <button class="qa-btn gray" onclick="showDeleteStep1()">← Go Back</button>
+            <button class="danger-btn-final" id="deleteAccountBtn" onclick="deleteAccount()" disabled>
+              🗑️ Delete My Account Forever
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
