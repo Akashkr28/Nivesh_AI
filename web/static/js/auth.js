@@ -47,6 +47,26 @@ async function doSignIn() {
       body: JSON.stringify({ email, password: pass }),
     });
     const data = await res.json();
+
+    // 403 = account exists but email not verified → go to OTP screen
+    if (res.status === 403) {
+      pendingEmail = email;
+      document.getElementById('verify-email-display').textContent = email;
+
+      // If OTP returned (no email provider), auto-fill boxes
+      if (data.otp_visible) {
+        const box = document.getElementById('otp-visible-box');
+        if (box) { box.textContent = data.otp_visible; }
+        document.getElementById('otp-visible-section')?.classList.remove('hidden');
+        data.otp_visible.split('').forEach((ch, i) => {
+          const el = document.getElementById('otp' + i);
+          if (el) el.value = ch;
+        });
+      }
+      showPanel('verify');
+      return;
+    }
+
     if (!res.ok) { showError('si-error', data.detail || 'Sign in failed.'); return; }
 
     localStorage.setItem('niveshai_token', data.token);
