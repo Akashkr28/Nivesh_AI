@@ -7,6 +7,25 @@ from pydantic import BaseModel, EmailStr, validator
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
+import asyncio
+
+_email_executor = ThreadPoolExecutor(max_workers=2)
+
+
+async def send_email_async(to_email, full_name, otp):
+    """Run email sending in a background thread with a 10-second timeout.
+    Never blocks the HTTP response — fire and forget."""
+    loop = asyncio.get_event_loop()
+    try:
+        await asyncio.wait_for(
+            loop.run_in_executor(_email_executor, send_verification_email, to_email, full_name, otp),
+            timeout=10.0
+        )
+    except asyncio.TimeoutError:
+        print(f"[NiveshAI] Email send timed out for {to_email}")
+    except Exception as e:
+        print(f"[NiveshAI] Email send error: {e}")
 
 from web.auth.database import get_db, User
 from web.auth.security import (
@@ -116,19 +135,22 @@ async def signup(req: SignUpRequest, db: Session = Depends(get_db)):
     db.add(user)
     db.commit()
 
-    email_sent = send_verification_email(req.email, req.full_name, otp)
+    # Send email in background — never blocks the response
+    asyncio.create_task(send_email_async(req.email, req.full_name, otp))
+
+    # Check if email provider is configured to decide what to show
+    import os
+    has_email = bool(os.environ.get("RESEND_API_KEY") or
+                     (os.environ.get("SMTP_EMAIL") and os.environ.get("SMTP_PASSWORD")))
 
     response = {
         "status": "otp_sent",
         "email": req.email,
     }
-
-    if email_sent:
-        # Real email sent successfully
-        response["message"] = f"Verification code sent to {req.email}. Please check your inbox (and spam folder)."
+    if has_email:
+        response["message"] = f"Verification code sent to {req.email}. Check your inbox (and spam folder)."
     else:
-        # SMTP not configured — show OTP on screen so user can still sign up
-        response["message"] = "Email not configured on this server. Your verification code is shown below."
+        response["message"] = "Use the verification code shown below to complete signup."
         response["otp_visible"] = otp
 
     return response
@@ -148,7 +170,8 @@ async def verify_otp(req: VerifyOTPRequest, db: Session = Depends(get_db)):
     user.verification_token = None
     db.commit()
 
-    send_welcome_email(user.email, user.full_name)
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(_email_executor, send_welcome_email, user.email, user.full_name)
     token = create_access_token(user.id, user.email)
 
     return {
@@ -164,11 +187,11 @@ async def signin(req: SignInRequest, db: Session = Depends(get_db)):
     if not user or not verify_password(req.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password")
     if not user.is_verified:
-        # Resend OTP
         otp = generate_verification_token()
         user.verification_token = otp
         db.commit()
-        send_verification_email(user.email, user.full_name, otp)
+        # Fire-and-forget — never blocks sign-in response
+        asyncio.create_task(send_email_async(user.email, user.full_name, otp))
         raise HTTPException(
             status_code=403,
             detail="Email not verified. A new verification code has been sent to your inbox."
@@ -265,12 +288,15 @@ async def resend_otp(email: str, db: Session = Depends(get_db)):
     if user.is_verified:
         raise HTTPException(status_code=400, detail="Account is already verified")
 
+    import os
+    has_email = bool(os.environ.get("RESEND_API_KEY") or
+                     (os.environ.get("SMTP_EMAIL") and os.environ.get("SMTP_PASSWORD")))
     otp = generate_verification_token()
     user.verification_token = otp
     db.commit()
-    email_sent = send_verification_email(user.email, user.full_name, otp)
+    asyncio.create_task(send_email_async(user.email, user.full_name, otp))
     response = {"status": "otp_resent", "message": "New verification code sent"}
-    if not email_sent:
+    if not has_email:
         response["otp_visible"] = otp
     return response
 
